@@ -15,6 +15,27 @@
         }
     }
 
+    function convertMessagesToOpenAI(messages) {
+        let convertedMessages = []
+        for (const message of messages) {
+            let convertedMessage = {
+                'role': message.role,
+                'content': []
+            }
+            let convertedContent = []
+            for (const chunk of message.content) {
+                if ('text' in chunk) {
+                    convertedContent.push({'type': 'text', 'text': chunk.text})
+                } else if ('image' in chunk) {
+                    convertedContent.push({'type': 'text', 'text': `![](${chunk.image})`})
+                }
+            }
+            convertedMessage.content = convertedContent
+            convertedMessages.push(convertedMessage)
+        }
+        return convertedMessages
+    }
+
     async function recieveMessage() {
         receivingMessage = true
 
@@ -24,12 +45,12 @@
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                messages: chatMessages,
+                messages: convertMessagesToOpenAI(chatMessages),
                 model: 'my-thinker'
             })
         });
 
-        chatMessages.push({'role': 'assistant', 'content': '', 'web_content': ''})
+        chatMessages.push({'role': 'assistant', 'content': [], 'web_content': []})
 
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -57,13 +78,15 @@
                     console.log(chunk)
                     if (chunk['start']) {
                         mode = chunk.start
-                        chatMessages.at(-1).web_content += `\nStarting: ${mode}\n`
+                        chatMessages.at(-1).web_content.push({'text': `Starting: ${mode}`})
+                        chatMessages.at(-1).web_content.push({'text': ''})
                         continue
                     }
 
                     if (chunk['model']) {
                         let model = chunk.model
-                        chatMessages.at(-1).web_content += `Using model: ${model}`
+                        chatMessages.at(-1).web_content.push({'text': `Using model: ${model}`})
+                        chatMessages.at(-1).web_content.push({'text': ''})
                         continue
                     }
 
@@ -72,9 +95,29 @@
                     //     break
                     // }
 
-                    chatMessages.at(-1).web_content += chunk.text
-                    if (mode === 'assistant_response') {
-                        chatMessages.at(-1).content += chunk.text
+                    function updateContent(contentArray, text) {
+                        let last = contentArray.at(-1)
+                        if (!last || !('text' in last)) {
+                            contentArray.push({'text': ''})
+                            last = contentArray.at(-1)
+                        }
+                        last.text += text
+                        contentArray[contentArray.length - 1] = last
+                    }
+
+                    const currentMessage = chatMessages.at(-1)
+                    if (chunk['text']) {
+                        updateContent(currentMessage.web_content, chunk.text)
+                        if (mode === 'assistant_response') {
+                            updateContent(currentMessage.content, chunk.text)
+                        }
+                    } else {
+                        if (chunk['image']) {
+                            currentMessage.web_content.push({'image': chunk.image})
+                            if (mode === 'assistant_response') {
+                                currentMessage.content.push({'image': chunk.image})
+                            }
+                        }
                     }
                 }
             }
@@ -96,7 +139,7 @@
 
         chatMessages.push({
             'role': 'user',
-            'content': currentMessage
+            'content': [{'text': currentMessage}]
         })
         currentMessage = ""
 

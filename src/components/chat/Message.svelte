@@ -17,5 +17,13 @@
 
 <div class="py-2 px-4 rounded-lg bg-neutral-700 w-6/12">
     <h6 class="font-bold text-lg">{displayRole}</h6>
-    <p class="whitespace-pre-line">{content}</p>
+    <div class="flex flex-col gap-2">
+        {#each content as chunk}
+            {#if 'text' in chunk && chunk.text !== ""}
+                <p class='whitespace-pre-wrap'>{chunk.text}</p>
+            {:else if 'image' in chunk}
+                <img src={chunk.image} alt="unknown" class="max-w-[25%]" />
+            {/if}
+        {/each}
+    </div>
 </div>
